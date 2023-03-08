@@ -43,9 +43,8 @@ module xtb_oniom
    !> To handle CML arguments
    type :: oniom_input
       character(len=:), allocatable :: first_arg
-      character(len=:), allocatable :: second_arg
-      !character(len=:), allocatable :: chrg
-      !logical :: g
+      character(len=:), allocatable :: second_arg, third_arg
+      !character(len=:), allocatable :: third_arg
    end type oniom_input
    
    !> ONIOM calculator 
@@ -128,13 +127,18 @@ subroutine newOniomCalculator(self, env, mol, input)
       
       icol = index(input%first_arg, ':')
       if (icol == 0) then
+         !if (allocated(input%third_arg)) then
+         !   print*, "cool"
+         !endif
          call env%error("Invalid method '"//input%first_arg//"' provided")
          return
       end if
+            print*, "pass"
+      stop
 
       self%method_high = string_to_id(input%first_arg(:icol - 1))
       self%method_low = string_to_id(input%first_arg(icol + 1:))
-      
+       
       if (self%method_high < 0 .or. self%method_high > 5) then
          call env%error("Invalid high-level method")
          return

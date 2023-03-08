@@ -1409,6 +1409,15 @@ subroutine parseArguments(env, args, inputFile, paramFile, accuracy, lgrad, &
          end if
          call move_alloc(sec, oniom%second_arg)
 
+         call args%nextArg(sec)
+         write(*,*) oniom%third_arg
+         !if (allocated(oniom%level3)) then 
+        !    print*,"yo ", sec
+         !endif
+          !  call move_alloc(sec, oniom%level3) 
+   stop
+
+         
       case('--cut')
          call set_cut
       
