@@ -91,6 +91,7 @@ module xtb_prog_main
    use xtb_iff_iffprepare, only : prepare_IFF
    use xtb_iff_data, only : TIFFData
    use xtb_oniom, only : oniom_input, TOniomCalculator, calculateCharge
+   use xtb_vertical, only : vfukui
    use xtb_tblite_calculator, only : TTBLiteCalculator, TTBLiteInput, newTBLiteWavefunction
    implicit none
    private
@@ -147,6 +148,7 @@ subroutine xtbMain(env, argParser)
    real(wp),allocatable :: cn  (:)
    real(wp),allocatable :: sat (:)
    real(wp),allocatable :: g   (:,:)
+   real(wp),allocatable :: fukui   (:,:)
    real(wp) :: vec3(3)
    type(TxTBParameter) :: globpar
    real(wp),allocatable :: dcn (:,:,:)
@@ -181,9 +183,7 @@ subroutine xtbMain(env, argParser)
    real(wp) :: zero,t0,t1,w0,w1,acc,etot2,g298
    real(wp) :: one,two
    real(wp) :: ea,ip
-   real(wp) :: vomega,vfukui
-   real(wp),allocatable :: f_plus(:), f_minus(:)
-   type(TRestart) :: wf_p, wf_m
+   real(wp) :: vomega
    parameter (zero=0.0_wp)
    parameter (one =1.0_wp)
    parameter (two =2.0_wp)
@@ -211,6 +211,12 @@ subroutine xtbMain(env, argParser)
    !> read the command line arguments
    call parseArguments(env, argParser, xcontrol, fnv, acc, lgrad, &
       & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, tblite)
+
+   !> Spin-polarization is only available in the tblite library
+   if(set%mode_extrun.ne.p_ext_tblite .and. tblite%spin_polarized) then
+     call env%error("Spin-polarization is only available with the tblite library! Try --tblite", source)
+   endif
+
 
    nFiles = argParser%countFiles()
    select case(nFiles)
@@ -505,7 +511,7 @@ subroutine xtbMain(env, argParser)
             fnv=xfind(p_fname_param_gfn0)
          endif
          if(set%gfn_method.eq.1) then
-            fnv=xfind(p_fname_param_ipea)
+            fnv=xfind(p_fname_param_gfn1)
          endif
          if(set%gfn_method.eq.2) then
             fnv=xfind(p_fname_param_gfn2)
@@ -765,29 +771,8 @@ subroutine xtbMain(env, argParser)
    ! ------------------------------------------------------------------------
    !> Fukui Index from Mulliken population analysis
    if (set%runtyp.eq.p_run_vfukui) then
-      allocate(f_plus(mol%n),f_minus(mol%n))
-      write(env%unit,'(a)')
-      write(env%unit,'("Fukui index Calculation")')
-      wf_p%wfn=chk%wfn
-      wf_m%wfn=chk%wfn
-      mol%chrg = mol%chrg + 1
-      wf_p%wfn%nel = wf_p%wfn%nel+1
-      if (mod(wf_p%wfn%nel,2).ne.0) wf_p%wfn%nopen = 1
-      call calc%singlepoint(env,mol,wf_p,1,exist,etot2,g,sigma,egap,res)
-      f_plus=wf_p%wfn%q-chk%wfn%q
-
-      mol%chrg = mol%chrg - 2
-      wf_m%wfn%nel = wf_m%wfn%nel-1
-      if (mod(wf_m%wfn%nel,2).ne.0) wf_m%wfn%nopen = 1
-      call calc%singlepoint(env,mol,wf_m,1,exist,etot2,g,sigma,egap,res)
-      f_minus=chk%wfn%q-wf_m%wfn%q
-      write(env%unit,'(a)')
-      write(env%unit, '(1x,"    #        f(+)     f(-)     f(0)")')
-      do i=1,mol%n
-         write(env%unit,'(i6,a4,2f9.3,2f9.3,2f9.3)') i, mol%sym(i), f_plus(i), f_minus(i), 0.5d0*(wf_p%wfn%q(i)-wf_m%wfn%q(i))
-      enddo
-      mol%chrg = mol%chrg + 1
-      deallocate(f_plus,f_minus)
+     allocate(fukui(3,mol%n))
+     call vfukui(env,mol,chk,calc,fukui)
    endif
 
 
@@ -1385,7 +1370,16 @@ subroutine parseArguments(env, args, inputFile, paramFile, accuracy, lgrad, &
          else
             call env%error("No color scheme provided for --color option", source)
          end if
-      
+
+
+      case('--spinpol')
+         if (get_xtb_feature('tblite')) then
+            tblite%spin_polarized = .true.
+         else
+            call env%error("Compiled without support for tblite library. This is required for spin-polarization", source)
+            cycle
+         end if
+
       case('--oniom')
          call set_exttyp('oniom')
          call args%nextArg(sec) 
