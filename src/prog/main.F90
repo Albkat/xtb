@@ -105,26 +105,49 @@ contains
 
 subroutine xtbMain(env, argParser)
 
-   !> Source of errors in the main program unit
+   !> error producing procedure
    character(len=*), parameter :: source = "prog_main"
 
+   !> calculation environment
    type(TEnvironment), intent(inout) :: env
 
+   !> parser object
    type(TArgParser), intent(inout) :: argParser
 
-!! ========================================================================
-!  use some wrapper types to bundle information together
+   ! use some wrapper types to bundle information together !
+   
+   !> molecular structure
    type(TMolecule) :: mol
+   
+   !> SCC results (energy, gradients, etc.)
    type(scc_results) :: res
+
+   !> abstract calculator core
    class(TCalculator), allocatable :: calc, cpxcalc
+
+   !> 
    type(freq_results) :: fres
+
+   !> wavefunction information
    type(TRestart) :: chk
+
+   !> charge equilibration data
    type(chrg_parameter) :: chrgeq
+
+   !> 
    type(TIFFData), allocatable :: iff_data
+
+   !> cli input information for ONIOM
    type(oniom_input) :: oniom
+   
+   !>
    type(TCpcmx) :: cpx
+   
+   !>
    type(TTBLiteInput) :: tblite
-!  store important names and stuff like that in FORTRAN strings
+
+   !  store important names and stuff like that in FORTRAN strings !
+
    character(len=:),allocatable :: fname    ! geometry input file
    character(len=:),allocatable :: xcontrol ! instruction file
    character(len=:),allocatable :: xrc      ! global instruction file
@@ -134,8 +157,7 @@ subroutine xtbMain(env, argParser)
    character(len=:),allocatable :: extension, basename, directory
    integer :: ftype
 
-!! ========================================================================
-!  default names for important files in xtb
+   !  default names for important files in xtb !
    character(len=*),parameter :: p_fname_rc = '.xtbrc'
    character(len=*),parameter :: p_fname_param_gfn0  = 'param_gfn0-xtb.txt'
    character(len=*),parameter :: p_fname_param_gfn1  = 'param_gfn1-xtb.txt'
@@ -160,15 +182,14 @@ subroutine xtbMain(env, argParser)
    real(wp),allocatable :: ql  (:)
    real(wp),allocatable :: qr  (:)
 
-!! ------------------------------------------------------------------------
+   !
    integer,external :: ncore
 
-!! ------------------------------------------------------------------------
+   !
    logical :: struc_conversion_done = .false.
    logical :: anyopt
 
-!! ========================================================================
-!  debugging variables for numerical gradient
+   ! debugging variables for numerical gradient !
    logical, parameter    :: gen_param = .false.
    logical, parameter    :: debug = .false.
    type(TRestart) :: wf0
@@ -178,10 +199,9 @@ subroutine xtbMain(env, argParser)
    real(wp) :: er,el
    logical  :: coffee ! if debugging gets really though, get a coffee
 
-!! ------------------------------------------------------------------------
-!  undocumented and unexplainable variables go here
+   !  undocumented and unexplainable variables go here !
    integer  :: nFiles, iFile
-   integer  :: rohf,err
+   integer  :: err
    real(wp) :: dum5,egap,etot,ipeashift
    real(wp) :: zero,t0,t1,w0,w1,etot2,g298
    real(wp) :: one,two
@@ -201,27 +221,49 @@ subroutine xtbMain(env, argParser)
    logical :: exitRun
    logical :: cold_fusion
 
-!  OMP stuff
+   !  OMP stuff !
    integer :: TID, OMP_GET_NUM_THREADS, OMP_GET_THREAD_NUM
    integer :: nproc
 
    type(TPrintTopo) :: printTopo ! gfnff topology printout list
 
+   ! some settings that are still not automatic !
+   egap = 0.0_wp
+   ipeashift = 0.0_wp
    xenv%home = env%xtbhome
    xenv%path = env%xtbpath
 
+   !---------!
+   ! PREFACE !
+   !---------!
+   
+   ! print the xtb banner with version number and compilation date !
+   ! making a fancy version of this is hard, x is difficult in ASCII art !
+   call xtb_header(env%unit)
+   
+   ! make sure you cannot blame us for destroying your computer !
+   call disclamer(env%unit)
 
-   ! ------------------------------------------------------------------------
-   !> read the command line arguments
-   call parseArguments(env, argParser, xcontrol, fnv, lgrad, &
+   ! how to cite this program !
+   call citation(env%unit)
+   
+   ! print current time !
+   call prdate('S')
+
+   !--------!
+   ! PARSER !
+   !--------!
+  
+   ! read the command line arguments !
+   call parseArguments(env, argParser, xcontrol, fnv, acc, lgrad, &
       & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, tblite)
 
-   !> Spin-polarization is only available in the tblite library
+   ! spin-polarization is only available in the tblite library !
    if(set%mode_extrun.ne.p_ext_tblite .and. tblite%spin_polarized) then
      call env%error("Spin-polarization is only available with the tblite library! Try --tblite", source)
    endif
 
-
+   ! get the name of input geometry file !
    nFiles = argParser%countFiles()
    select case(nFiles)
    case(0)
@@ -239,6 +281,7 @@ subroutine xtbMain(env, argParser)
       call argParser%nextFile(fname)
    end select
 
+   ! if instruction file name is not allocated !
    if (.not.allocated(xcontrol)) then
       if (copycontrol) then
          xcontrol = 'xtb.inp'
@@ -247,26 +290,27 @@ subroutine xtbMain(env, argParser)
       end if
    end if
 
+   ! check if optimization is desired !
    anyopt = ((set%runtyp.eq.p_run_opt).or.(set%runtyp.eq.p_run_ohess).or. &
       &   (set%runtyp.eq.p_run_omd).or.(set%runtyp.eq.p_run_screen).or. &
       &   (set%runtyp.eq.p_run_metaopt))
    
+   ! terminate in case of the optimization with CPCM-X model !
    if (allocated(set%solvInput%cpxsolvent) .and. anyopt) call env%terminate("CPCM-X not implemented for geometry optimization. &
       &Please use another solvation model for optimization instead.")
 
    call env%checkpoint("Command line argument parsing failed")
 
+   !------------------!
+   ! READ INPUT FILES !
+   !------------------!
 
-   ! ------------------------------------------------------------------------
-   !> read the detailed input file
+   ! read the instruction file !
    call rdcontrol(xcontrol, env, copy_file=copycontrol)
-
    call env%checkpoint("Reading '"//xcontrol//"' failed")
 
-
-   ! ------------------------------------------------------------------------
-   !> read dot-Files before reading the rc and after reading the xcontrol
-   !> Total molecular charge
+   ! read dot-Files ! 
+   ! total charge !
    call open_file(ich,'.CHRG','r')
    if (ich.ne.-1) then
       call getline(ich,cdum,iostat=err)
@@ -277,10 +321,9 @@ subroutine xtbMain(env, argParser)
          call close_file(ich)
       end if
    end if
-
    call env%checkpoint("Reading charge from file failed")
 
-   !> Number of unpaired electrons
+   ! number of unpaired electrons !
    call open_file(ich,'.UHF','r')
    if (ich.ne.-1) then
       call getline(ich,cdum,iostat=err)
@@ -290,9 +333,10 @@ subroutine xtbMain(env, argParser)
          call set_spin(env,cdum)
          call close_file(ich)
       end if
-   endif
+   endif 
+   call env%checkpoint("Reading multiplicity from file failed")
    
-   !> efield read: gfnff only
+   ! efield read (gfnff only) !
    call open_file(ich,'.EFIELD','r')
    if (ich.ne.-1) then
       call getline(ich,cdum,iostat=err)
@@ -303,44 +347,17 @@ subroutine xtbMain(env, argParser)
          call close_file(ich)
       end if
    endif
+   call env%checkpoint("Reading external field from file failed")
 
-   call env%checkpoint("Reading multiplicity from file failed")
 
-
-   ! ------------------------------------------------------------------------
-   !> read the xtbrc if you can find it (use rdpath directly instead of xfind)
-   call rdpath(env%xtbpath, p_fname_rc, xrc, exist)
+   ! read the xtbrc !
+   call rdpath(env%xtbpath, p_fname_rc, xrc, exist) ! use rdpath directly instead of xfind
    if (exist) then
       call rdcontrol(xrc, env, copy_file=.false.)
-
       call env%checkpoint("Reading '"//xrc//"' failed")
    endif
 
-
-   ! ------------------------------------------------------------------------
-   !> FIXME: some settings that are still not automatic
-   !> Make sure GFN0-xTB uses the correct exttyp
-   if(set%gfn_method == 0)  call set_exttyp('eht')
-   rohf = 1 ! HS default
-   egap = 0.0_wp
-   ipeashift = 0.0_wp
-
-
-   ! ========================================================================
-   !> no user interaction up to now, time to show off!
-   !> print the xtb banner with version number and compilation date
-   !> making a fancy version of this is hard, x is difficult in ASCII art
-   call xtb_header(env%unit)
-   !> make sure you cannot blame us for destroying your computer
-   call disclamer(env%unit)
-   !> how to cite this program
-   call citation(env%unit)
-   !> print current time
-   call prdate('S')
-
-
-   ! ------------------------------------------------------------------------
-   !> get molecular structure
+   ! read molecular structure file !
    if (coffee) then ! it's coffee time
       fname = 'caffeine'
       call get_coffee(mol)
@@ -355,7 +372,7 @@ subroutine xtbMain(env, argParser)
          call env%warning("Two dimensional input structure detected", source)
       end if
 
-      ! Special CT input file case
+      ! special CT input file case !
       if (mol%chrg /= 0.0_wp) then
          if (set%clichrg) then
             call env%warning("Charge in sdf/mol input was overwritten", source)
@@ -367,9 +384,11 @@ subroutine xtbMain(env, argParser)
       call env%checkpoint("reading geometry input '"//fname//"' failed")
    endif
 
+   !----------------!
+   ! INITIALIZATION !
+   !----------------!
 
-   ! ------------------------------------------------------------------------
-   !> initialize the global storage
+   ! initialize the global storage !
    call init_fix(mol%n)
    call init_split(mol%n)
    call init_constr(mol%n,mol%at)
@@ -383,8 +402,7 @@ subroutine xtbMain(env, argParser)
    end if
    call load_rmsdbias(rmsdset,mol%n,mol%at,mol%xyz)
 
-   ! ------------------------------------------------------------------------
-   !> get some memory
+   ! get some memory !
    allocate(cn(mol%n),sat(mol%n),g(3,mol%n), source = 0.0_wp)
    atmass = atomic_mass(mol%at) * autoamu ! from splitparam.f90
    set%periodic = mol%npbc > 0
@@ -397,20 +415,22 @@ subroutine xtbMain(env, argParser)
       endif
    endif
 
+   ! calculate nuclear charges !
    do i=1,mol%n
       mol%z(i) = mol%at(i) - ncore( mol%at(i) )
       ! lanthanides without f are treated as La
       if(mol%at(i).gt.57.and.mol%at(i).lt.72) mol%z(i)=3
    enddo
 
-   !> initialize time step for MD if requested autocomplete
+   ! initialize time step for MD if requested autocomplete !
    if (set%tstep_md < 0.0_wp) then
       set%tstep_md = (minval(atmass)/(atomic_mass(1)*autoamu))**(1.0_wp/3.0_wp)
    endif
 
+   ! assign net charge and multiplicity ! 
    mol%chrg = real(set%ichrg, wp)
-      !! To assign charge 
    mol%uhf = set%nalphabeta
+   
    call initrand
 
    call setup_summary(env%unit,mol%n,fname,xcontrol,chk%wfn,xrc)
