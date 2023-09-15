@@ -84,7 +84,8 @@ subroutine newCalculator(env, mol, calc, fname, restart, accuracy, input, iff_da
    select case(set%mode_extrun)
    case default
       call env%error("Unknown calculator type", source)
-   
+      return
+
    case(p_ext_oniom)
       if (.not.present(input)) then
          call env%error("ONIOM calculator requires input", source)

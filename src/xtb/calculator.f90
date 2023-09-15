@@ -113,6 +113,7 @@ subroutine newXTBCalculator(env, mol, calc, fname, method, accuracy)
    logical :: exist, okbas
    logical :: exitRun
 
+   ! parameter file name ! 
    if (present(fname)) then
       filename = fname
    else
@@ -130,35 +131,42 @@ subroutine newXTBCalculator(env, mol, calc, fname, method, accuracy)
          end select
       end if
    end if
+
+   ! capture the absence of parametrization file name !
    if (.not.allocated(filename)) then
       call env%error("No parameter file or parametrisation info provided", source)
       return
    end if
 
+   ! define accuracy !
    if (present(accuracy)) then
       calc%accuracy = accuracy
    else
       calc%accuracy = 1.0_wp
    end if
 
-   calc%etemp = 300.0_wp
-   calc%maxiter = 250
+   ! general SCC parameters !
+   calc%etemp = set%etemp
+   calc%maxiter = set%maxscciter
 
-   !> Obtain the parameter file
+   ! obtain the parameter file !
    allocate(calc%xtbData)
    call open_file(ich, filename, 'r')
    exist = ich /= -1
    if (exist) then
       call readParam(env, ich, globpar, calc%xtbData, .true.)
       call close_file(ich)
-   else ! no parameter file, check if we have one compiled into the code
+   
+   ! no parameter file, check if we have one compiled into the code !
+   else 
       call use_parameterset(filename, globpar, calc%xtbData, exist)
       if (.not.exist) then
          call env%error('Parameter file '//filename//' not found!', source)
          return
       end if
    endif
-
+   
+   ! check if parametrization corresponds to the calculation method !
    if (present(method)) then
       if (method /= calc%xtbData%level) then
          call env%error("Requested method does not match loaded method", source)

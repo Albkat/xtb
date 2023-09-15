@@ -494,23 +494,38 @@ module xtb_setparam
 
 contains
 
-
+!> initialize the random number generator
 subroutine initrand
+
    implicit none
+   
+   !> loop counter; array indexing
    integer :: i,j
+   
+   !>  storage for the seed(s)
    integer,allocatable :: iseed(:)
+
+   !> arbitrary seeding number
    integer :: imagic = 41
+
+   ! use custom seed, deterministic !
    if (set%samerand) then
+            
       call random_seed(size=j)
       allocate(iseed(j), source = imagic)
+      
       do i = 1, j
          iseed(i) = iseed(i)+j
       enddo
+      
       call random_seed(put=iseed)
       deallocate(iseed)
+
+   ! system-generated seed, pseudo-random !
    else
       call random_seed()
    endif
+
 end subroutine initrand
 
 function get_namespace(string) result(name)

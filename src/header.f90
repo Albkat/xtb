@@ -326,25 +326,34 @@ write(iunit,'(10x,a)') &
    !< < < < < < < < < < < < < > > > > > > > > > > > > >!
 end subroutine siman_header
 
+!> create header with offset value
 subroutine generic_header(iunit,string,width,offset)
-implicit none
-integer,intent(in) :: iunit
-integer,intent(in) :: offset
-integer,intent(in) :: width
-character(len=*),intent(in) :: string
-character(len=width) :: dum1,dum2
-character(len=2*width) :: outstring
-character(len=width) :: formatstr
-integer :: strlen,ifront,iback
-strlen = len(string)
-ifront = (width - strlen)/2
-iback  = width - ifront - strlen
-write(dum1,*) width
-write(dum2,*) offset
-write(formatstr,'(i0,"x,a,",i0,"x")') ifront,iback
-write(outstring,'("|",'//formatstr//',"|")') string
-write(iunit,'('//dum2//'x,1x,'//dum1//'("-"),1x)')
-write(iunit,'('//dum2//'x,a)') trim(outstring)
-write(iunit,'('//dum2//'x,1x,'//dum1//'("-"),1x)')
+   
+   implicit none
+   
+   integer,intent(in) :: iunit
+   integer,intent(in) :: offset
+   integer,intent(in) :: width
+   character(len=*),intent(in) :: string
+   
+   character(len=width) :: dum1,dum2
+   character(len=2*width) :: outstring
+   character(len=width) :: formatstr
+   integer :: strlen,ifront,iback
+   
+   strlen = len(string)
+   ifront = (width - strlen)/2
+   iback  = width - ifront - strlen
+   
+   write(dum1,*) width
+   write(dum2,*) offset
+
+   write(formatstr,'(i0,"x,a,",i0,"x")') ifront,iback
+   write(outstring,'("|",'//formatstr//',"|")') string
+
+   write(iunit,'('//dum2//'x,1x,'//dum1//'("-"),1x)')
+   write(iunit,'('//dum2//'x,a)') trim(outstring)
+   write(iunit,'('//dum2//'x,1x,'//dum1//'("-"),1x)')
+
 end subroutine generic_header
 

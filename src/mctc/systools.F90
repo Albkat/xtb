@@ -136,13 +136,26 @@ subroutine rdarg(i,arg,iostat)
    if (present(iostat)) iostat=0
 end subroutine rdarg
 
+!> read enviroment variable
 subroutine rdvar(name,var,iostat)
+
+   !> raw variable name
    character(len=*),intent(in) :: name
+   
+   !> output vairable
    character(len=:),allocatable,intent(out) :: var
+   
+   !> error status
    integer,intent(out),optional :: iostat
+   
+   !> local buffer variables
    integer :: l,err
+
+   ! get the length of envvar !
    if (allocated(var)) deallocate(var)
    call get_environment_variable(name,length=l,status=err)
+   
+   ! check existence of envvar !
    if (err.ne.0) then
       if (present(iostat)) then
          iostat = err
@@ -151,6 +164,8 @@ subroutine rdvar(name,var,iostat)
          call raise('E','System variable unassigned')
       endif
    endif
+
+   ! allocate and check if memory allocation was successful !
    allocate( character(len=l) :: var, stat=err )
    if (err.ne.0) then
       if (present(iostat)) then
@@ -160,8 +175,8 @@ subroutine rdvar(name,var,iostat)
          call raise('E','could not be allocated')
       endif
    endif
-   ! If the environment variable has not been set, l=0, and the
-   ! following get_environment_variable call crashes.
+
+   ! if the environment variable has a non-zero length, retrieve its value !
    if (l.gt.0) then
       call get_environment_variable(name,var,status=err)
       if (err.ne.0) then
@@ -174,6 +189,7 @@ subroutine rdvar(name,var,iostat)
       endif
    endif
    if (present(iostat)) iostat=0
+
 end subroutine rdvar
 
 end module xtb_mctc_systools

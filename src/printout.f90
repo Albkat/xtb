@@ -16,7 +16,7 @@
 ! along with xtb.  If not, see <https://www.gnu.org/licenses/>.
 
 module xtb_printout
-   use xtb_mctc_accuracy, only : wp, sp
+   
    implicit none
 
 contains
@@ -56,39 +56,64 @@ subroutine writecosmofile(np,pa,espe,fname,nat,at,xyz,atom_weight)
 
 end subroutine writecosmofile
 
-subroutine setup_summary(iunit,n,fname,xcontrol,wfx,xrc)
+!> print calculation settings
+subroutine setup_summary(iunit,n,fname,xcontrol,xrc)
+
    use xtb_mctc_accuracy, only : wp
    use xtb_mctc_global, only : persistentEnv
    use xtb_mctc_systools
-   use xtb_type_wavefunction
    use xtb_setparam
    !$ use omp_lib
+
    implicit none
-   type(TWavefunction),intent(in) :: wfx
+   
+   !> I/O unit
    integer, intent(in) :: iunit
-   character(len=*),intent(in),optional :: xrc
-   character(len=*),intent(in) :: xcontrol
-   character(len=*),intent(in) :: fname
-   integer :: i,l,err
+   
+   !> number of atoms
    integer,intent(in) :: n
-   real(wp) :: dum5
+   
+   !> coordinate file
+   character(len=*),intent(in) :: fname
+   
+   !> instruction file
+   character(len=*),intent(in) :: xcontrol
+   
+   !> global configuration file
+   character(len=*),intent(in),optional :: xrc
+   
+   
+   !> CLI command length
+   integer :: l
+
+   !> error handling
+   integer :: err
+   
+   !> dummy raw string
    character(len=:),allocatable :: cdum
+   
+   ! header !
    write(iunit,'(a)')
    call generic_header(iunit,'Calculation Setup',49,10)
    write(iunit,'(a)')
+
+   ! program call !
    if (allocated(cdum)) deallocate(cdum)
    call get_command(length=l)
    allocate( character(len=l) :: cdum )
    call get_command(cdum)
    write(iunit,'(10x,a,":",1x,a)') 'program call               ',cdum
-   call rdvar('HOSTNAME',cdum,err)
-   if (err.eq.0) &
+   
+   ! hostname (not a posix standard variable) ! 
+   if (allocated(persistentEnv%hostname)) &
       write(iunit,'(10x,a,":",1x,a)') 'hostname                   ',cdum
+   ! namespace ! 
    if (allocated(persistentEnv%io%namespace)) &
       write(iunit,'(10x,a,":",1x,a)') 'calculation namespace      ',persistentEnv%io%namespace
-   ! ----------------------------------------------------------------------
-   !  print the home and path to check if there are set correctly
+   
+   ! input geometry file !
    write(iunit,'(10x,a,":",1x,a)') 'coordinate file            ',fname
+   
    if (set%verbose) then
       write(iunit,'(10x,a,":",1x,a)') 'xtbhome directory          ',xenv%home
       write(iunit,'(10x,a,":",1x,a)') 'path for xtb               ',xenv%path
@@ -96,14 +121,14 @@ subroutine setup_summary(iunit,n,fname,xcontrol,wfx,xrc)
       if (present(xrc)) &
          write(iunit,'(10x,a,":",1x,a)') 'global configurations file ',xrc
    endif
-   ! ----------------------------------------------------------------------
-   !  technical data
+   
+   ! technical data !
    !$omp parallel
    !$omp master
    !$ write(iunit,'(10x,a,":",6x,i16)') 'omp threads                ',omp_get_num_threads()
    !$omp end master
    !$omp end parallel
-   ! ----------------------------------------------------------------------
+   
    write(iunit,'(a)')
 
 end subroutine

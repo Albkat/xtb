@@ -255,7 +255,7 @@ subroutine xtbMain(env, argParser)
    !--------!
   
    ! read the command line arguments !
-   call parseArguments(env, argParser, xcontrol, fnv, acc, lgrad, &
+   call parseArguments(env, argParser, xcontrol, fnv, lgrad, &
       & restart, gsolvstate, strict, copycontrol, coffee, printTopo, oniom, tblite)
 
    ! spin-polarization is only available in the tblite library !
@@ -431,29 +431,31 @@ subroutine xtbMain(env, argParser)
    mol%chrg = real(set%ichrg, wp)
    mol%uhf = set%nalphabeta
    
+   ! initialize random number generator  ! 
    call initrand
 
-   call setup_summary(env%unit,mol%n,fname,xcontrol,chk%wfn,xrc)
+   ! print calculation settings ! 
+   call setup_summary(env%unit,mol%n,fname,xcontrol,xrc)
 
-   ! ------------------------------------------------------------------------
-   !> 2D => 3D STRUCTURE CONVERTER
-   ! ------------------------------------------------------------------------
+   ! 2D => 3D structure converter !
    if (mol%info%two_dimensional) then
       call struc_convert (env,restart,mol,chk,egap,set%etemp,set%maxscciter, &
                        &  set%optset%maxoptcycle,etot,g,sigma)
       struc_conversion_done = .true.
       mol%info%two_dimensional = .false.
     end if
-
-   ! ------------------------------------------------------------------------
-   !> CONSTRAINTS & SCANS
-   !> now we are at a point that we can check for requested constraints
+   
+   !---------------------!
+   ! CONSTRAINTS & SCANS !
+   !---------------------!
+   
+   ! now we are at a point that we can check for requested constraints !
    call read_userdata(xcontrol,env,mol)
 
-   !> initialize metadynamics
+   ! initialize metadynamics !
    call load_metadynamic(metaset,mol%n,mol%at,mol%xyz)
 
-   !> restraining potential
+   ! restraining potential !
    if (allocated(potset%xyz)) then
       if (lconstr_all_bonds)    call constrain_all_bonds(mol%n,mol%at,potset%xyz)
       if (lconstr_all_angles)   call constrain_all_angles(mol%n,mol%at,potset%xyz)
@@ -465,7 +467,8 @@ subroutine xtbMain(env, argParser)
       if (lconstr_all_torsions) call constrain_all_torsions(mol%n,mol%at,mol%xyz)
       call setup_constrain_pot(mol%n,mol%at,mol%xyz)
    endif
-   !  fragmentation for CMA constrain
+
+   ! fragmentation for CMA constrain !
    if(iatf1.eq.0.and.iatf2.eq.0) then
       call ncoord_erf(mol%n,mol%at,mol%xyz,cn)
       call splitm(mol%n,mol%at,mol%xyz,cn)
@@ -477,87 +480,75 @@ subroutine xtbMain(env, argParser)
       call pot_info(env%unit,mol%n,mol%at,mol%xyz)
    endif
 
-   ! ------------------------------------------------------------------------
-   !> write copy of detailed input
+   ! write copy of detailed input !
    if (copycontrol) then
       call open_set(ictrl,xcontrol)
       call write_set(ictrl)
       call close_set(ictrl)
    endif
 
-   ! ------------------------------------------------------------------------
-   !> if you have requested a define we stop here...
+   ! if you have requested a define we stop here... !
    if (set%define) then
       if (set%verbose) call main_geometry(env%unit,mol)
       call eval_define(set%veryverbose)
    endif
+
    call env%show('Please study the warnings concerning your input carefully')
    call raise('F', 'Please study the warnings concerning your input carefully')
-
-   ! ========================================================================
-   !> From here we switch to the method setup
-   !> enable error on warnings
+   
+   !--------------!
+   ! METHOD SETUP !
+   !--------------!  
+   
+   ! enable error on warnings !
    if (strict) call mctc_strict
    env%strict = strict
 
-   !> one last check on the input geometry
+   ! one last check on the input geometry !
    call check_cold_fusion(env, mol, cold_fusion)
    if (cold_fusion) then
       call env%error("XTB REFUSES TO CONTINUE WITH THIS CALCULATION!")
       call env%terminate("Some atoms in the start geometry are *very* close")
    endif
 
-   !> check if someone is still using GFN3...
+   ! check if someone is still using GFN3... !
    if (set%gfn_method.eq.3) then
       call env%terminate('This is an internal error, please use gfn_method=2!')
    end if
 
-   ! ------------------------------------------------------------------------
-   !> Print the method header and select the parameter file
-
+   ! print the method header and select the parameter file !
    if (.not.allocated(fnv)) then
       select case(set%runtyp)
       case default
          call env%terminate('This is an internal error, please define your runtypes!')
       case(p_run_scc,p_run_grad,p_run_opt,p_run_hess,p_run_ohess,p_run_bhess, &
             p_run_md,p_run_omd,p_run_path,p_run_screen, &
-            p_run_modef,p_run_mdopt,p_run_metaopt)
-        if (set%mode_extrun.eq.p_ext_gfnff) then
+            p_run_modef,p_run_mdopt,p_run_metaopt,p_run_vip,p_run_vipea,p_run_vea, &
+            p_run_vfukui,p_run_vomega)
+         if (set%mode_extrun.eq.p_ext_gfnff) then
             fnv=xfind(p_fname_param_gfnff)
-        else
-           if(set%gfn_method.eq.0) then
-              fnv=xfind(p_fname_param_gfn0)
-           endif
-           if(set%gfn_method.eq.1) then
-              fnv=xfind(p_fname_param_gfn1)
-           endif
-           if(set%gfn_method.eq.2) then
-              fnv=xfind(p_fname_param_gfn2)
-           endif
-        end if
-      case(p_run_vip,p_run_vea,p_run_vipea,p_run_vfukui,p_run_vomega)
-         if(set%gfn_method.eq.0) then
-            fnv=xfind(p_fname_param_gfn0)
-         endif
-         if(set%gfn_method.eq.1) then
-            fnv=xfind(p_fname_param_gfn1)
-         endif
-         if(set%gfn_method.eq.2) then
-            fnv=xfind(p_fname_param_gfn2)
-         endif
+         else
+            if(set%gfn_method.eq.0) then
+               fnv=xfind(p_fname_param_gfn0)
+            endif
+            if(set%gfn_method.eq.1) then
+               fnv=xfind(p_fname_param_gfn1)
+            endif
+            if(set%gfn_method.eq.2) then
+               fnv=xfind(p_fname_param_gfn2)
+            endif
+         end if
       end select
    endif
 
-   !-------------------------------------------------------------------------
-   !> Perform a precomputation of electronic properties for xTB-IFF
+   ! xTB-IFF electronic properties !
    if(set%mode_extrun == p_ext_iff) then
       allocate(iff_data)
       call prepare_IFF(env, mol, iff_data)
       call env%checkpoint("Could not generate electronic properties")
    end if
 
-   ! ------------------------------------------------------------------------
-   !> Obtain the parameter data
+   ! obtain the parameter data and allocate calculator !
    call newCalculator(env, mol, calc, fnv, restart, set%acc, oniom, iff_data, tblite)
    call env%checkpoint("Could not setup single-point calculator")
 
@@ -565,8 +556,7 @@ subroutine xtbMain(env, argParser)
    call env%checkpoint("Could not setup defaults")
 
 
-   ! ------------------------------------------------------------------------
-   !> initial guess, setup wavefunction
+   ! initial guess, setup wavefunction !
    select type(calc)
    type is(TxTBCalculator)
       call chk%wfn%allocate(mol%n,calc%basis%nshell,calc%basis%nao)
@@ -615,8 +605,6 @@ subroutine xtbMain(env, argParser)
       if (restart.and.calc%xtbData%level /= 0) then ! only in first run
          call readRestart(env,chk%wfn,'xtbrestart',mol%n,mol%at,set%gfn_method,exist,.true.)
       endif
-      calc%etemp = set%etemp
-      calc%maxiter = set%maxscciter
       ipeashift = calc%xtbData%ipeashift
    type is(TTBLiteCalculator)
       if (restart) then
@@ -639,12 +627,15 @@ subroutine xtbMain(env, argParser)
   
 
    end select
+   
+   !--------------!
+   ! SINGLE-POINT !
+   !--------------!
 
-   ! ========================================================================
-   !> the SP energy which is always done
    call start_timing(2)
    call calc%singlepoint(env,mol,chk,2,exist,etot,g,sigma,egap,res)
    call stop_timing(2)
+
    select type(calc)
    type is(TGFFCalculator)
      gff_print=.false.
