@@ -88,6 +88,9 @@ subroutine repulsionEnGrad_latp(mol, repData, trans, cutoff, energy, gradient, &
    !$omp private(iat, jat, itr, iZp, jZp, r2, rij, r1, alpha, zeff, kexp, &
    !$omp& t16, t26, t27, dE, dG, dS, k, l)
 #endif
+
+   ! GFN-type atom-pairwise repulsion energy !
+   ! ref: DOI: 10.1002/wcms.1493, formula (21) !
    do iAt = 1, mol%n
       do jAt = 1, mol%n
          if (jAt > iAt) cycle

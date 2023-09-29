@@ -488,13 +488,14 @@ subroutine scf(env, mol, wfn, basis, pcem, xtbData, solvation, &
    if (profile) call timer%measure(1)
    if (profile) call timer%measure(3,"classical contributions")
 
-   ! ------------------------------------------------------------------------
-   ! Repulsion energy
+   ! Repulsion energy !
    ep = 0.0_wp
-   call latp%getLatticePoints(trans, 40.0_wp)
-   call repulsionEnGrad(mol, xtbData%repulsion, trans, 40.0_wp, &
+   call latp%getLatticePoints(trans, 10.0_wp)
+   call repulsionEnGrad(mol, xtbData%repulsion, trans, 10.0_wp, &
       & ep, gradient, sigma)
 
+   print *, "repulsion", ep
+   stop
 
    ! ------------------------------------------------------------------------
    ! Halogen bond correction

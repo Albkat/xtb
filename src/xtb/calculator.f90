@@ -248,16 +248,22 @@ subroutine singlepoint(self, env, mol, chk, printlevel, restart, &
    logical, parameter :: ccm = .true.
    logical :: exitRun
 
-   call mol%update
 
+   !-------!
+   ! SETUP !
+   !-------!
+   
+   call mol%update
    energy = 0.0_wp
    gradient(:, :) = 0.0_wp
    sigma(:, :) = 0.0_wp
    hlgap = 0.0_wp
    efix = 0.0_wp
-
-   ! ------------------------------------------------------------------------
-   !  actual calculation
+   
+   !--------------------!
+   ! ACTUAL CALCULATION !
+   !--------------------!
+   
    select case(self%xtbData%level)
    case(1, 2)
       if (allocated(self%solvation)) then
