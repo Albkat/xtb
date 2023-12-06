@@ -310,6 +310,7 @@ subroutine xtbMain(env, argParser)
 
    ! ------------------------------------------------------------------------
    !> read the xtbrc if you can find it (use rdpath directly instead of xfind)
+   
    call rdpath(env%xtbpath, p_fname_rc, xrc, exist)
    if (exist) then
       call rdcontrol(xrc, env, copy_file=.false.)

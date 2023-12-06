@@ -285,9 +285,14 @@ module xtb_setparam
    !> skip interval in -mdav, -mdopt
    integer  :: skip_md = 500 ! mdopt, mdav
 
-   !> MD time step in fs (automatically determined if < 0),
+   !> MD propagation step in fs (automatically determined if < 0),
    !> could be 4-5 fs with shake =2, md_hmass=4
    real(wp) :: tstep_md = 4.0_wp
+   
+   !>  SCC accuracy level in MD. Every 10th step the SCC is properly converged
+   !>  at sccconv=1.0. sccmd should be < 5 in critical cases, effects may show
+   !>  up as bad thermostating
+   real(wp) :: accu_md = 2.0_wp
    
    !>  increase hydrogen mass to this value in amu (at const. tot. mass)
    !>  allowing large time steps (=0 off)
@@ -301,6 +306,7 @@ module xtb_setparam
    logical  :: honly = .false.
    logical :: forcewrrestart = .false.
 
+   logical  :: restart_md = .false.
 !! ------------------------------------------------------------------------
 !  target rmsd value for bhess run in Ångström
    real(wp) :: target_rmsd = 0.1_wp
@@ -314,10 +320,7 @@ module xtb_setparam
    real(wp) :: Tend_siman = 1000.0_wp
 !  include enantiomers in siman (=1)
    logical  :: enan_siman = .false.
-!  SCC accuracy level in MD. Every 10th step the SCC is properly converged
-!  at sccconv=1.0. sccmd should be < 5 in critical cases, effects may show
-!  up as bad thermostating
-   real(wp) :: accu_md = 2.0_wp
+
 
 !! ------------------------------------------------------------------------
 !  SCC accuracy level in Hessian runs
@@ -486,7 +489,6 @@ module xtb_setparam
    ! ENSO (ENergic SOrting something algorithm) compatibility mode
    logical  :: enso_mode = .false.
 
-   logical  :: restart_md = .false.
    logical  :: fit = .false. ! write fit data in scf.f
    logical  :: tsopt = .false.
    logical  :: mdrtrconstr = .false. ! not used

@@ -137,8 +137,11 @@ subroutine boltz(n,t,e,p)
    p = p / sum(p)
 end subroutine boltz
 
+!> molecular dynamics (velocity Verlet integeration)
+!> more info: https://xtb-docs.readthedocs.io/en/latest/md.html
 subroutine md(env,mol,chk,calc, &
       &       egap,et,maxiter,epot,grd,sigma,icall,Tsoll,cdump2)
+
    use xtb_mctc_accuracy, only : wp
    use xtb_mctc_convert, only : autokcal, aatoau, amutokg, amutoau, fstoau
    use xtb_mctc_constants, only : pi, kB
@@ -155,31 +158,65 @@ subroutine md(env,mol,chk,calc, &
    use xtb_type_setvar, only: metadyn_setvar
    implicit none
 
-   !> Calculation environment
+   !> calculation environment
    type(TEnvironment), intent(inout) :: env
 
+   !> molecular structure data
    type(TMolecule),intent(inout) :: mol
+   
+   !> WFN 
    type(TRestart),intent(inout) :: chk
+   
+   !> polymorphic calculator
    class(TCalculator), intent(inout) :: calc
-   integer  :: icall
-   integer, intent(in) :: maxiter
-   integer, intent(inout) :: cdump2
-   real(wp), intent(inout) :: epot
-   real(wp), intent(in) :: et
+
+   !> HOMO-LUMO gap
    real(wp), intent(inout) :: egap
+  
+   !> electronic temperature
+   real(wp), intent(in) :: et
+
+   !> SCC iterations
+   integer, intent(in) :: maxiter
+   
+   !> total energy
+   real(wp), intent(inout) :: epot
+   
+   !> gradients
    real(wp), intent(inout) :: grd(3,mol%n)
+   
+   !>
    real(wp), intent(inout) :: sigma(3,3)
+  
+   !> simultaion temperature
    real(wp), intent(in) :: Tsoll
+   
+   !> MD modes: equilibration, GMD
+   integer, intent(in)  :: icall
+
+   !> data dumping frequency
+   integer, intent(inout) :: cdump2
+
+!-----------------!
+! Local variables !
+!-----------------!
+   
+   !> SCC results
    type(scc_results) :: res
 
+   real(wp) :: metatime ! elapsed time (MTD) !
+   real(wp) :: tmax ! total simulation time !
+   real(wp) :: mintime,maxtime ! MD time limits ! 
+   logical :: equi, gmd ! simulation modes !
+
    real(wp) :: step,eel1,tstep,taut,xlam2,accu,driftthr
-   real(wp) :: Ekin,tmass,f,mintime
+   real(wp) :: Ekin,tmass,f
    real(wp) :: Tinit,Tav,T,epav,ekav,dav,cma(3),bave,bavt
-   real(wp) :: dum,edum,eerror,xx(10),molmass,slope,maxtime
-   real(wp) :: tstep0,tmax,nfreedom,t0,w0,t1,w1,ep_prec,rege(4)
+   real(wp) :: dum,edum,eerror,xx(10),molmass,slope
+   real(wp) :: tstep0,nfreedom,t0,w0,t1,w1,ep_prec,rege(4)
    real(wp) :: tors(mol%n),be(3),b0(3),tor,dip(3)
    real(wp) :: rcoord(3)
-   logical  :: ex,thermostat,restart,confdump,equi,gmd,ldum
+   logical  :: ex,thermostat,restart,confdump,ldum
 
    integer :: i,j,k,ic,jc,ia,ja,ii,jj,ndum,cdump,nmax,ibin
    integer :: nstep,ndump,mdump,dumpstep,screendump,acount
@@ -201,57 +238,63 @@ subroutine md(env,mol,chk,calc, &
    integer :: ich,trj,pdb,imdl
    logical :: exist
 
-   ! Displace reference geometry by 1e-6
+   ! displace reference geometry by 1e-6 !
    real(wp), parameter :: atom_displacement = 1.0e-6_wp
 
    type(metadyn_setvar) :: metasetlocal
    real(wp) :: emtd
-   real(wp) :: metatime
-   metatime = 0.0_wp
 
-   call delete_file('xtbmdok')
+
+!----------------!
+! Initialization !
+!----------------!
+
+   metatime = 0.0_wp ! start timing with 0 !
+   call delete_file('xtbmdok') ! delete marker file ! 
 
    if(icall.eq.0)then
-      write(*,*)'trajectories on xtb.trj or xtb.trj.<n>'
+      write(env%unit,'(/,1x,a)')'*trajectories written to xtb.trj or xtb.trj.<n>*'
    endif
 
-   ! special equi and GMD settings
+   ! special equilibration and GMD settings !
    tmax=set%time_md
    equi=.false.
    gmd=.false.
-   if(icall.eq.-1) equi = .true.   ! equilibration
-   if(icall.eq.-2)  gmd = .true.   ! GMD production run
 
+   if(icall.eq.-1) equi = .true.   ! equilibration !
    if(equi) then
-      mintime = 5.0d0              ! minimum time in ps
-      maxtime = tmax               ! maximum time in ps
-      driftthr=2.d-3               ! stop MD if drift = slope Epot (block average) regression (4 points) below this value
+      mintime = 5.0d0              ! minimum time in ps !
+      maxtime = tmax               ! maximum time in ps !
+      driftthr=2.d-3               ! stop MD if drift = slope Epot (block average) regression (4 points) below this value !
    endif
+   
+   if(icall.eq.-2)  gmd = .true.   ! GMD production run !
    if(gmd) then
-      mintime = tmax               ! minimum time in ps
-      maxtime = tmax * 4           ! maximum time in ps
+      mintime = tmax               ! minimum time in ps !
+      maxtime = tmax * 4           ! maximum time in ps !
       driftthr=1.d-3
    endif
 
-   ! real coord dump to e.g. scoord.n in siman
-   confdump=.false.
+   ! data dumping settings !
+   confdump=.false. ! if should be dumped in e.g. scoord.n !
    if(nscan.eq.0.and.cdump2.ge.0) confdump=.true.
-   if(set%ceasefiles) confdump=.false.
-   ! just screen
-   screendump=200
-
-   ! blocklength for SD of energy and T
+   if(set%ceasefiles) confdump=.false. 
+   screendump=200 ! screen dump frequency !
+   
+   ! blocklength for SD of energy and T !
    blockl=min(5000,idint(5000/set%tstep_md))
    allocate(blocke(blockl),blockt(blockl))
 
-   ! take paramters from common
-   tstep0=set%tstep_md
-   cdump0=set%dump_md/set%tstep_md    ! scoord
-   dumpstep=set%dump_md2/set%tstep_md ! xyz
+   ! read parameters from global settings !
+   tstep0=set%tstep_md ! time step for propagation !
+   cdump0=set%dump_md/set%tstep_md    ! scoord !
+   dumpstep=set%dump_md2/set%tstep_md ! xyz !
    thermostat=set%nvt_md
    restart=set%restart_md
    accu=set%accu_md
 
+   print*, tstep0, cdump0, dumpstep, thermostat, restart, accu
+   stop
    allocate(velo(3,mol%n),vel(3,mol%n),veln(3,mol%n),xyzo(3,mol%n),acc(3,mol%n),mass(mol%n))
 
    call neighbor(mol%n,mol%xyz,mol%at,nbo) ! neighbor list
@@ -846,7 +889,6 @@ end subroutine rdmdrestart
 !cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 ! initialize velocities uniformly
 !cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-
 subroutine mdinitu(n,iat,velo,mass,Ekin)
    use xtb_setparam
    implicit none

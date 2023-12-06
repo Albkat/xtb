@@ -190,17 +190,26 @@ subroutine fixmetal(n,iat,xyz)
 
 end subroutine fixmetal
 
-
+!> find neighboring atoms 
 subroutine neighbor(natoms,xyz,iz,nb)
    use xtb_mctc_accuracy, only : wp
    implicit none
-   integer iz(*),natoms,nb(0:20,*)
-   real(wp)  xyz(3,*)
+   
+   !> number of atoms
+   integer :: natoms
 
-   logical da
+   !> Cartesian coordinates
+   real(wp)  xyz(3,*)
+   
+   !> atomic numbers
+   integer :: iz(*)
+   
+   !> neighbor list 
+   integer :: nb(0:20,*)
+
    integer iat,i,j,k,nn,ni
    real(wp) dx,dy,dz,r,damp,xn,rr,rco,r2,f,pi,a1
-   real(wp) rad(94)
+   real(wp) :: rad(94)
    data rad / &
       & 0.32D0,0.37D0,1.30D0,0.99D0,0.84D0,0.75D0,0.71D0,0.64D0,0.60D0, &
       & 0.62D0,1.60D0,1.40D0,1.24D0,1.14D0,1.09D0,1.04D0,1.00D0,1.01D0, &
