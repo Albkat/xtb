@@ -966,31 +966,42 @@ subroutine xtbMain(env, argParser)
         & (set%runtyp.eq.p_run_hess).or.(set%runtyp.eq.p_run_ohess).or.(set%runtyp.eq.p_run_bhess))
    end select  
 
-
-   ! ------------------------------------------------------------------------
-   !  xtb molecular dynamics
+!--------------------!
+! Molecular dynamics !
+!--------------------!
+   
    if ((set%runtyp.eq.p_run_md).or.(set%runtyp.eq.p_run_omd)) then
+      
+      ! metadynamics !
       if (metaset%maxsave .gt. 0) then
+         
+         ! handling periodic case !
          if (mol%npbc > 0) then
             call env%error("Metadynamic under PBC is not implemented", source)
          endif
+         
          call metadyn_header(env%unit)
       else
-         call md_header(env%unit)
+         call md_header(env%unit)      
       endif
-      fixset%n = 0 ! no fixing for MD runs
-      call start_timing(6)
+
+      fixset%n = 0 ! deactivate exact fixing !
+      call start_timing(6) ! start MD timer !
       idum = 0
+
+      ! distinguish b/n GFN-FF and all other calculators !
       select type(calc)
       class default
          if (set%shake_md) call init_shake(mol%n,mol%at,mol%xyz,chk%wfn%wbo)
       type is(TGFFCalculator)
          if (set%shake_md) call gff_init_shake(mol%n,mol%at,mol%xyz,calc%topo)
       end select
-      call md &
-         &     (env,mol,chk,calc, &
+
+      ! actual MD !
+      call md(env,mol,chk,calc, &
          &      egap,set%etemp,set%maxscciter,etot,g,sigma,0,set%temp_md,idum)
-      call stop_timing(6)
+      call stop_timing(6) ! stop MD timer !
+   
    endif
 
 
