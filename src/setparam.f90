@@ -259,30 +259,42 @@ module xtb_setparam
    ! frequency scaling for therostatistical calculation
    real(wp) :: thermo_fscal = 1.0_wp
 
-!! ------------------------------------------------------------------------
-!  MD thermostat/initial siman/GBSA temperature
+!--------------------!
+! Molecular dynamics !   
+!--------------------!
+
+   !> MD thermostat/initial siman/GBSA temperature
    real(wp) :: temp_md = 298.15_wp
-!  MD run time in ps
+   
+   !> MD total run time in ps
    real(wp) :: time_md = 50.0_wp
-!  dump (=optimize) structure in siman every mddump fs
+
+   !> dump (=optimize) structure in siman every mddump fs
    real(wp) :: dump_md = 1000.0_wp ! scoord
-!  MD dump step in fs for xyz output file, MUST BE .eq. mdstep for power
-!  IR spectra
+   
+   !> MD dump step in fs for xyz output file 
+   !> MUST BE .eq. mdstep for power IR spectra
    real(wp) :: dump_md2 = 50.0_wp ! molden,xyzfile
-!  set to 1 if dumps (trj file) should contain velocities
+
+   !> set to 1 if dumps (trj file) should contain velocities
    logical  :: velodump = .false.
-!  use thermostat (=1, =0 for NVE)
+
+   !> use thermostat (=1, =0 for NVE)
    logical  :: nvt_md = .true.
-!  skip interval in -mdav, -mdopt
+
+   !> skip interval in -mdav, -mdopt
    integer  :: skip_md = 500 ! mdopt, mdav
-!  MD time step in fs (automatically determined if < 0),
-!  could be 4-5 fs with shake =2, md_hmass=4
+
+   !> MD time step in fs (automatically determined if < 0),
+   !> could be 4-5 fs with shake =2, md_hmass=4
    real(wp) :: tstep_md = 4.0_wp
-!  increase hydrogen mass to this value in amu (at const. tot. mass)
-!  allowing large time steps (=0 off)
+   
+   !>  increase hydrogen mass to this value in amu (at const. tot. mass)
+   !>  allowing large time steps (=0 off)
    integer  :: md_hmass = 4
-!  shake on (=0: off which is default) for X-H bonds only (=1),
-!  or all bonds (=2) or user defined bonds (=3)
+   
+   !>  shake on (=0: off which is default) for X-H bonds only (=1),
+   !>  or all bonds (=2) or user defined bonds (=3)
    integer  :: shake_mode = 2
    logical  :: shake_md = .true.
    logical  :: xhonly = .true.
