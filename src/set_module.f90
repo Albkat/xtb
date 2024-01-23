@@ -1007,7 +1007,10 @@ subroutine set_runtyp(typ)
       set%runtyp = p_run_grad
    case('opt')
       set%runtyp = p_run_opt
-
+   case('tsopt')
+      set%runtyp = p_run_tsopt
+      set%tsopt   = .true.
+   
    case('hess')
       set%runtyp = p_run_hess
    case('ohess')

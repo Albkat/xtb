@@ -134,7 +134,7 @@ subroutine numhess( &
    step=set%step_hess
    if(set%extcode.eq.5) step=step*2.0_wp ! MOPAC is not very accurate
    ! SCC accuraccy
-   acc=set%accu_hess
+   calc%accuracy=set%accu_hess
    scalh=set%scale_hess
 
    call calc%singlepoint(env, mol, chk0, 0, .true., res%etot, res%grad, sr, egap, sccr)
@@ -144,7 +144,7 @@ subroutine numhess( &
    write(env%unit,'(''alpha                :'',F10.5)') metaset%global_width
    end if
    write(env%unit,'(''step length          :'',F10.5)') step
-   write(env%unit,'(''SCC accuracy         :'',F10.5)') acc
+   write(env%unit,'(''SCC accuracy         :'',F10.5)') calc%accuracy
    write(env%unit,'(''Hessian scale factor :'',F10.5)') scalh
    write(env%unit,'(''frozen atoms in %    :'',F10.5,i5)') &
       & real(freezeset%n,wp)/real(mol%n,wp)*100,freezeset%n

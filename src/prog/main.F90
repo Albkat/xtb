@@ -253,7 +253,7 @@ subroutine xtbMain(env, argParser)
 
    anyopt = ((set%runtyp.eq.p_run_opt).or.(set%runtyp.eq.p_run_ohess).or. &
       &   (set%runtyp.eq.p_run_omd).or.(set%runtyp.eq.p_run_screen).or. &
-      &   (set%runtyp.eq.p_run_metaopt))
+      &   (set%runtyp.eq.p_run_metaopt).or.(set%runtyp.eq.p_run_tsopt))
    
    if (allocated(set%solvInput%cpxsolvent) .and. anyopt) call env%terminate("CPCM-X not implemented for geometry optimization. &
       &Please use another solvation model for optimization instead.")
@@ -497,7 +497,7 @@ subroutine xtbMain(env, argParser)
       select case(set%runtyp)
       case default
          call env%terminate('This is an internal error, please define your runtypes!')
-      case(p_run_scc,p_run_grad,p_run_opt,p_run_hess,p_run_ohess,p_run_bhess, &
+      case(p_run_scc,p_run_grad,p_run_opt,p_run_tsopt,p_run_hess,p_run_ohess,p_run_bhess, &
             p_run_md,p_run_omd,p_run_path,p_run_screen, &
             p_run_modef,p_run_mdopt,p_run_metaopt)
         if (set%mode_extrun.eq.p_ext_gfnff) then
@@ -1665,6 +1665,13 @@ subroutine parseArguments(env, args, inputFile, paramFile, lgrad, &
 
       case('-o', '--opt')
          call set_runtyp('opt')
+         call args%nextArg(sec)
+         if (allocated(sec)) then
+            call set_opt(env,'optlevel',sec)
+         endif
+
+      case('--tsopt')
+         call set_runtyp('tsopt')
          call args%nextArg(sec)
          if (allocated(sec)) then
             call set_opt(env,'optlevel',sec)

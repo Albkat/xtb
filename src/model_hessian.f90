@@ -2081,14 +2081,15 @@ end subroutine mh_eeq
 
 end module xtb_modelhessian
 
-      subroutine ddvopt(Cart,nAtoms,Hess,iANr,s6)
-      Implicit Integer(i-n)
-      Implicit Real*8 (a-h, o-z)
+subroutine ddvopt(Cart,nAtoms,Hess,iANr,s6)
+   
+   implicit integer(i-n)
+   implicit real*8 (a-h, o-z)
 ! include "common/real.inc" (molpro 2002.6)
-      Real*8 Zero, One, Two, Three, Four, Five, Six, Seven, &
+   real*8 :: Zero, One, Two, Three, Four, Five, Six, Seven, &
      &       Eight, RNine, Ten, Half, Pi, SqrtP2, TwoP34, &
      &       TwoP54, One2C2
-      Parameter(Zero =0.0D0, One  =1.0D0, Two=2.0D0, Three=3.0D0, &
+   parameter  (Zero =0.0D0, One  =1.0D0, Two=2.0D0, Three=3.0D0, &
      &          Four =4.0D0, Five =5.0D0, Six=6.0D0, Seven=7.0D0, &
      &          Eight=8.0D0, rNine=9.0D0, Ten=1.0D1, Half=0.5D0, &
      &          Pi    =3.141592653589793D0, &
@@ -2098,16 +2099,16 @@ end module xtb_modelhessian
      &          One2C2=0.2662567690426443D-04)
 ! end: common/real.inc
 
-      Real*8 Cart(3,nAtoms),rij(3),rjk(3),rkl(3), &
+   real*8 :: Cart(3,nAtoms),rij(3),rjk(3),rkl(3), &
      &       Hess((3*nAtoms)*(3*nAtoms+1)/2),si(3),sj(3),sk(3), &
      &       sl(3),sm(3),x(2),y(2),z(2), &
      &       xyz(3,4), C(3,4), Dum(3,4,3,4)
-      Integer   iANr(nAtoms)
+   integer :: iANr(nAtoms)
 
-      logical rcutoff
+   logical :: rcutoff
 
 ! include  "common/ddvdt.inc" (molpro 2002.6)
-      Real*8 rAV(3,3), aAV(3,3), &
+   real*8 :: rAV(3,3), aAV(3,3), &
      &       B_Str(6), A_Bend(2), A_Trsn(2), A_StrH(2), &
      &       rkr, rkf, A_Str, RF_Const, &
      &       wthr
@@ -2130,10 +2131,10 @@ end module xtb_modelhessian
 ! end: "common/ddvdt.inc"
 
 !cc VDWx-Parameters (Grimme) used for vdw-correction of model hessian
-      real*8 alphavdw, damp, c6(100), c6k, c6l, c66, vander(100), &
+   real*8 :: alphavdw, damp, c6(100), c6k, c6l, c66, vander(100), &
      &   vdw(3,3), dr(3)
-      integer kxyz, lxyz
-      data vander &
+   integer :: kxyz, lxyz
+   data vander &
 ! H, He
      &     /0.91d0,0.92d0, &
 ! Li-Ne
@@ -2650,7 +2651,7 @@ end module xtb_modelhessian
 444     Continue
       End Do               ! jAtom
       Return
-      End
+   end subroutine
 
       subroutine gff_ddvopt(Cart,nAtoms,Hess,at,s6,param,topo)
       use xtb_gfnff_data, only : TGFFData

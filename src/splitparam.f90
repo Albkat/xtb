@@ -33,7 +33,9 @@ module xtb_splitparam
    real(wp) :: rcma = 0.0_wp
    real(wp) :: massf1 = 0.0_wp
    real(wp) :: massf2 = 0.0_wp
-   real(wp),allocatable :: atmass(:)
+   
+   !> atomic masses
+   real(wp), allocatable :: atmass(:)
 
    integer  :: maxfrag = 0
 
