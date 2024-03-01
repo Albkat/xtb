@@ -19,7 +19,7 @@ jobs:
             repo-token: ${{ secrets.GITHUB_TOKEN }}
             stale-issue-label: 'stale' # Label to detect
             stale-pr-label: 'stale'
-            days-before-stale: 0
+            days-before-stale: -1
             days-before-close: 7
             stale-issue-message: 'This issue is set to auto-close in 7 days if no further updates would be detected.' 
             close-issue-message: 'This issue has been automatically closed due to inactivity.'
