@@ -218,7 +218,6 @@ contains
       xenv%home = env%xtbhome
       xenv%path = env%xtbpath
 
-      ! ------------------------------------------------------------------------
       !> read the command line arguments
 
       call parseArguments(env, argParser, xcontrol, fnv, lgrad, &
