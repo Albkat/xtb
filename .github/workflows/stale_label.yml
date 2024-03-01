@@ -13,15 +13,26 @@ jobs:
       runs-on: ubuntu-latest
       if: github.event.label.name == 'stale'
       steps:
-         - uses: actions/stale@v9
-           with:
-            repo-token: ${{ secrets.GITHUB_TOKEN }}
-            stale-issue-label: 'stale' # Label to detect
-            stale-pr-label: 'stale'
-            any-of-labels: 'stale'
-            days-before-stale: 1
-            days-before-close: 7
-            stale-issue-message: 'This issue is set to auto-close in 7 days if no further updates would be detected.' 
-            close-issue-message: 'This issue has been automatically closed due to inactivity.'
-            stale-pr-message: 'This PR is set to auto-close in 7 days if no further updates would be detected.' 
-            close-pr-message: 'This PR has been automatically closed due to inactivity.'
+         -  name: Post stale message for PR
+            if: github.event.pull_request
+            uses: actions/github-script@v5
+            with:
+               script: |
+                  github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.payload.pull_request.number,
+                  body: "This PR is set to auto-close in 7 days if no further updates would be detected."})
+               github-token: ${{ secrets.GITHUB_TOKEN }}
+         -  name : Close Stale Items
+            uses: actions/stale@v9
+            with:
+               repo-token: ${{ secrets.GITHUB_TOKEN }}
+               stale-issue-label: 'stale' # Label to detect
+               stale-pr-label: 'stale'
+               any-of-labels: 'stale'
+               days-before-stale: 1
+               days-before-close: 7
+               stale-issue-message: 'This issue is set to auto-close in 7 days if no further updates would be detected.' 
+               close-issue-message: 'This issue has been automatically closed due to inactivity.'
+               close-pr-message: 'This PR has been automatically closed due to inactivity.'
