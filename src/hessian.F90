@@ -146,7 +146,7 @@ subroutine numhess( &
    step=set%step_hess
    if(set%extcode.eq.5) step=step*2.0_wp ! MOPAC is not very accurate
    ! SCC accuraccy
-   acc=set%accu_hess
+   calc%accuracy=set%accu_hess
    scalh=set%scale_hess
 
    call calc%singlepoint(env, mol, chk0, 0, .true., res%etot, res%grad, sr, egap, sccr)
@@ -156,7 +156,7 @@ subroutine numhess( &
    write(env%unit,'(''alpha                :'',F10.5)') metaset%global_width
    end if
    write(env%unit,'(''step length          :'',F10.5)') step
-   write(env%unit,'(''SCC accuracy         :'',F10.5)') acc
+   write(env%unit,'(''SCC accuracy         :'',F10.5)') calc%accuracy
    write(env%unit,'(''Hessian scale factor :'',F10.5)') scalh
    write(env%unit,'(''frozen atoms in %    :'',F10.5,i5)') &
       & real(freezeset%n,wp)/real(mol%n,wp)*100,freezeset%n
@@ -332,6 +332,7 @@ subroutine numhess( &
          hss(k)=res%hess(j,i)
       enddo
    enddo
+
    ! same for bhess run
    if (set%runtyp.eq.p_run_bhess) then
       k=0
@@ -342,6 +343,7 @@ subroutine numhess( &
          enddo
       enddo
    end if
+
    ! project
    if(.not.res%linear)then ! projection does not work for linear mol.
       if (set%runtyp.eq.p_run_bhess) then
@@ -349,6 +351,7 @@ subroutine numhess( &
       end if
       call trproj(mol%n,n3,mol%xyz,hss,.false.,0,res%freq,1) ! freq is dummy
    endif
+
    ! non mass weigthed Hessian in hss
    hname = 'hessian'
    write(env%unit,'(a)')
@@ -364,6 +367,8 @@ subroutine numhess( &
          res%hess(i,j)=res%hess(j,i)
       enddo
    enddo
+   
+   
    ! same for bhess run
    if (set%runtyp.eq.p_run_bhess) then
       k=0
@@ -375,8 +380,10 @@ subroutine numhess( &
          enddo
       enddo
    end if
+
    ! calcualte htb without RMSD bias
    if (set%runtyp.eq.p_run_bhess) htb=res%hess-hbias
+   
    ! diag
    lwork  = 1 + 6*n3 + 2*n3**2
    allocate(aux(lwork))
@@ -385,6 +392,7 @@ subroutine numhess( &
       call env%error('Diagonalization of hessian failed', source)
       return
    end if
+
 
    ! calculate fc_tb and fc_bias
    alp1=1.27_wp

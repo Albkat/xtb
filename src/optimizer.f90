@@ -22,7 +22,6 @@ module xtb_optimizer
    use xtb_type_environment, only : TEnvironment
    use xtb_extern_turbomole, only : TTMCalculator
    use xtb_bfgs
-   use xtb_hessian, only : numhess
    use xtb_david2
    implicit none
 
@@ -141,6 +140,7 @@ subroutine ancopt(env,ilog,mol,chk,calc, &
    use xtb_hessian, only : trproj,rdhess
    use xtb_readin
    use xtb_lsrmsd
+   use xtb_splitparam, only : atmass
 
    implicit none
    
@@ -259,6 +259,7 @@ subroutine ancopt(env,ilog,mol,chk,calc, &
    !> Hessian matrix
    real(wp),allocatable :: h (:,:), hess_tmp(:,:)
 
+   real(wp),allocatable :: isqm(:)
    real(wp),allocatable :: b (:,:)
    real(wp),allocatable :: pmode(:,:)
    real(wp),allocatable :: grmsd(:,:)
@@ -332,7 +333,7 @@ subroutine ancopt(env,ilog,mol,chk,calc, &
    endif
    if(maxopt.lt.maxmicro) maxmicro=maxopt
    
-   ! use Powell update if TS optimization ! 
+   ! use Powell update if TS optimization (-> not implemeted) ! 
    if(set%tsopt)then
       hlow=max(hlow,0.250d0)
       iupdat=1
@@ -448,6 +449,7 @@ subroutine ancopt(env,ilog,mol,chk,calc, &
    molopt = mol ! copy molecular information
    if (profile) call timer%measure(1) ! start opt timer
 
+!
 ! ======================================================================
    ANC_microiter: do
 ! ======================================================================
@@ -464,26 +466,89 @@ subroutine ancopt(env,ilog,mol,chk,calc, &
       if (pr) &
          &  write(env%unit,'(/,''generating ANC from exact Hessian ...'')')
       
-      call modhes(env, calc, set%mhset, molopt%n, molopt%xyz, molopt%at, fc, pr)   ! def: Lindh model (1995)
-      call env%check(fail)
-      if (fail) then
-         call env%error("Calculation of model hessian failed", source)
-         return
-      end if
-      
-      ! blow up Hessian !
-      k=0
-      do i=1,nat3
-         do j=1,i
-            k=k+1
-            h(i,j)=fc(k)
-            h(j,i)=fc(k)
+      ! calculate numerical hessian for TS optimization !
+      if (set%runtyp == p_run_tsopt) then
+         allocate(dipgrad(3,nat3))
+         anc%hess = 0.0_wp
+         dipgrad  = 0.0_wp
+         h= 0.0_wp
+         list = [(i, i = 1, mol%n)]
+         step_hess=set%step_hess
+         calc%accuracy = set%accu_hess
+         call calc%hessian(env,molopt,chk,list,step_hess,h,dipgrad)
+
+         ! symmetrize (if not in the debug mode) !
+         if(.not.debug(1)) then
+            allocate(hess_tmp(nat3,nat3))
+            do i=1,nat3
+               do j=1,nat3
+                  hess_tmp(j,i)=(h(i,j)+h(j,i))*0.5_wp
+                  if(abs(h(i,j)-h(j,i)) .gt. 1.0e-2_wp) then
+                     write(errStr,'(a,1x,i0,1x,i0,1x,a,1x,es14.6,1x,es14.6)') &
+                        & 'Hessian element ',i,j,' is not symmetric:',h(i,j),h(j,i)
+                     call env%warning(trim(errStr), source)
+                  endif
+               enddo
+            enddo
+            h = hess_tmp
+         endif
+         
+         k=0
+         do i=1,nat3
+            do j=1,i
+               k=k+1
+               fc(k)=h(j,i)
+            enddo
          enddo
-      enddo
+         
+         ! allocate(isqm(nat3))
+         ! ! inverse mass array
+         ! do ia = 1, mol%n
+         !    do ic = 1, 3
+         !       ii = (ia-1)*3+ic
+         !       isqm(ii) = 1.0_wp/sqrt(atmass(ia))
+         !       !amass(ii) = isqm(ii)/sqrt(amutoau)
+         !    enddo
+         ! enddo
+
+         ! ! include masses !
+         ! k=0
+         ! do i=1,nat3
+         !    do j=1,i
+         !       k=k+1
+         !       h(j,i)=fc(k)*isqm(i)*isqm(j)
+         !       h(i,j)=h(j,i)
+         !    enddo
+         ! enddo
+                  
+      ! calculate model Hessian otherwise !
+      else
+         
+         if (pr) &
+            &  write(env%unit,'(/,''generating ANC from model Hessian ...'')')
+
+         call modhes(env, calc, set%mhset, molopt%n, molopt%xyz, molopt%at, fc, pr)   ! def: Lindh model (1995)
+         call env%check(fail)
+         if (fail) then
+            call env%error("Calculation of model hessian failed", source)
+            return
+         end if
+       
+         ! blow up Hessian !
+         k=0
+         do i=1,nat3
+            do j=1,i
+               k=k+1
+               h(i,j)=fc(k)
+               h(j,i)=fc(k)
+            enddo
+         enddo
+
+      endif
 
       thr=1.d-11
    
-   ! read in Hessian from file !
+    ! read in Hessian from file !
    else 
       
       if(pr) &
@@ -502,12 +567,7 @@ subroutine ancopt(env,ilog,mol,chk,calc, &
 
    endif
   
-   if (debug(2) .and. nat3 <= 30) then !######## DEBUG ########
-      write(env%unit,'(/,''Hessian matrix'')')
-      write(hessfmt,'(a,i0,a)') '(', nat3, 'F10.6)'
-      write(env%unit,hessfmt) (h(:,i), i=1,nat3)
-   endif
-
+  
    ! project out translational and rotational modes !
    if(modef.eq.0)then
       if(fixset%n.gt.0)then
@@ -520,6 +580,25 @@ subroutine ancopt(env,ilog,mol,chk,calc, &
       call trproj(molopt%n,nat3,molopt%xyz,fc,.false.,modef,pmode,modef) ! NMF
    endif
    
+   ! blow up Hessian !
+   k=0
+   do i=1,nat3
+      do j=1,i
+         k=k+1
+         h(i,j)=fc(k)
+         h(j,i)=fc(k)
+      enddo
+   enddo
+
+
+   if (debug(2)) then !######## DEBUG ########
+      if (nat3 <= 30) then ! only for small systems
+         write(env%unit,'(/,''Hessian matrix'')')
+         write(hessfmt,'(a,i0,a)') '(', nat3, 'F10.6)'
+         write(env%unit,hessfmt) (h(:,i), i=1,nat3)
+      endif
+   endif
+
    if (profile) call timer%measure(2) ! stop timer for model Hessian
 
 !----------------------------------------------------------------!
@@ -531,16 +610,22 @@ subroutine ancopt(env,ilog,mol,chk,calc, &
    ! diagonalize Hessian and sort eigenvalues !
    call anc%new(env%unit,molopt%xyz,h,pr,linear)  
    if (profile) call timer%measure(3) ! stop timer for ANC generation
-   esave = etot ! save energy 
+   esave = etot ! save energy
 
 !----------------------------------------------------------------!
 !---------------------- Optimization ----------------------------!
 !----------------------------------------------------------------!
-   call relax(env,iter,molopt,anc,restart,maxmicro,maxdispl,ethr,gthr, &
-      & iii,chk,calc,egap,acc,et,maxiter,iupdat,etot,g,sigma,ilog,pr,fail, &
-      & converged,timer,set%optset%exact_rf,avconv)
+   if (set%runtyp == p_run_tsopt) then
+      call tsopt(env,iter,molopt,anc,restart,maxmicro,maxdispl,ethr,gthr, &
+         & iii,chk,calc,egap,acc,et,maxiter,iupdat,etot,g,sigma,ilog,pr,fail, &
+         & converged,timer,set%optset%exact_rf,avconv)
+   else
+      call relax(env,iter,molopt,anc,restart,maxmicro,maxdispl,ethr,gthr, &
+         & iii,chk,calc,egap,acc,et,maxiter,iupdat,etot,g,sigma,ilog,pr,fail, &
+         & converged,timer,set%optset%exact_rf,avconv)
+   endif
 
-   ! check for errors !
+   stop
    call env%check(fail)
    if (fail) then
       call env%error("Could not relax/optimize structure", source)
@@ -935,7 +1020,6 @@ subroutine relax(env,iter,mol,anc,restart,maxcycle,maxdispl,ethr,gthr, &
    dsnrm=sqrt(ddot(anc%nvar,displ,1,displ,1)) ! displacement norm
    if(pr)then
       
-      ! find the largest displacement !
       gold = abs(displ)
       imax(1) = maxloc(gold,1); gold(imax(1)) = 0.0_wp
       imax(2) = maxloc(gold,1); gold(imax(2)) = 0.0_wp
@@ -957,7 +1041,7 @@ subroutine relax(env,iter,mol,anc,restart,maxcycle,maxdispl,ethr,gthr, &
       exit main_loop
    endif
 
-   ! new coordinates !
+!  new coordinates
    anc%coord = anc%coord + displ * alp
 
    ! conv check !
@@ -970,7 +1054,8 @@ subroutine relax(env,iter,mol,anc,restart,maxcycle,maxdispl,ethr,gthr, &
 !! ========================================================================
    enddo main_loop
 !! ========================================================================
-   
+  
+    
    ! cleanup !
    if (allocated(Uaug))  deallocate(Uaug)
    if (allocated(eaug))  deallocate(eaug)
@@ -982,6 +1067,387 @@ subroutine relax(env,iter,mol,anc,restart,maxcycle,maxdispl,ethr,gthr, &
    call anc%get_cartesian(mol%xyz)
 
 end subroutine relax
+
+!> Transition state optimization using Quasi-Newton method and p-RFO
+subroutine tsopt(env,iter,mol,anc,restart,maxcycle,maxdispl,ethr,gthr, &
+      &          ii,chk,calc, &
+      &          egap,acc_in,et,maxiter,iupdat,etot,g,sigma,ilog,pr,fail,converged, &
+      &          timer,exact,avconv)
+
+   use xtb_mctc_blas, only : blas_gemv
+   use xtb_type_molecule
+   use xtb_type_anc
+   use xtb_type_restart
+   use xtb_type_calculator
+   use xtb_type_data
+   use xtb_type_timer
+
+   implicit none
+
+   !> source of errors in the main program unit
+   character(len=*), parameter :: source = "optimizer_relax"
+
+   !> calculation environment
+   type(TEnvironment), intent(inout) :: env
+
+   !> molecular structure data
+   type(TMolecule),    intent(inout) :: mol
+   
+   !> timer instance
+   type(tb_timer),       intent(inout) :: timer
+   
+   !> ANC instance
+   type(tb_anc),         intent(inout) :: anc
+   
+   !> WFN 
+   type(TRestart),intent(inout) :: chk
+   
+   !> polymorphic calculator instance
+   class(TCalculator), intent(inout) :: calc
+   
+   !> number of micro iterations 
+   integer, intent(in)    :: maxiter
+
+   !> Hessian update algorithm
+   integer, intent(in)    :: iupdat
+
+   !> unit number for log file
+   integer, intent(in)    :: ilog
+   real(wp),intent(in)    :: et
+
+   real(wp),intent(inout) :: etot
+   real(wp),intent(in)    :: acc_in
+   real(wp),intent(inout) :: g(3,mol%n)
+   real(wp),intent(inout) :: sigma(3,3)
+   real(wp),intent(inout) :: egap
+   logical, intent(out)   :: converged
+   logical, intent(in)    :: exact
+   type(convergence_log), intent(inout), optional :: avconv
+
+   type(scc_results) :: res
+   integer  :: nvar1,npvar,npvar1
+   logical  :: restart, first, pr, fail
+   logical  :: econverged
+   logical  :: gconverged
+   logical  :: lowered
+   integer  :: maxcycle, iter, prlevel
+   integer  :: i, j, ii, jj, k, lwork, info, m, idum, imax(3)
+   real(wp) :: step = 1.0E-6_wp
+   real(wp) :: energy,ethr,gthr,dsnrm,maxdispl,t0,w0,t1,w1
+   real(wp) :: lambda,gnorm,dnorm,ddot,eold,xdum,estart,acc,e_in
+   real(wp) :: depred,echng,dummy,maxd,alp,gchng,smallreal,gnold
+   real(wp),allocatable :: gold(:)
+   real(wp),allocatable :: displ(:), gint(:)
+   real(sp),allocatable :: eaug(:), eaug_neg(:)
+   real(sp),allocatable :: Uaug(:,:), Uaug_neg(:,:)
+   real(sp),allocatable :: Aaug(:), Aaug_neg(:)
+   real(sp) :: r4dum,sdot
+   parameter (r4dum=1.e-8)
+   parameter (smallreal=1.d-14)
+   integer, allocatable :: list(:)
+   real(wp),allocatable:: dipgrad(:, :)
+
+!----------------------------------------------------------------!
+!--------------------- Initialization ---------------------------!
+!----------------------------------------------------------------!
+   
+
+   ! set printlevel !
+   if (pr) then 
+      prlevel = 1
+   else 
+      prlevel = 0
+   endif
+   
+   ! initialize variables !
+   gnorm  = 0.0_wp
+   depred = 0.0_wp
+   echng  = 0.0_wp
+   alp    = 1.0_wp
+   maxd   = maxdispl
+   acc    = acc_in
+   energy = etot
+   e_in   = etot
+   first  = .true.
+   converged = .false.
+
+   nvar1  = anc%nvar         ! dimension of RF calculation
+   npvar  = anc%nvar*(anc%nvar+1)/2 ! packed size of Hessian (note the abuse of nvar1!)
+   npvar1 = nvar1*(nvar1+1)/2  ! packed size of augmented Hessian
+
+   allocate( gold(anc%nvar), displ(anc%nvar), gint(anc%nvar), source = 0.0_wp )
+   allocate( eaug_neg(2), Uaug_neg(2,1),Aaug_neg(3) )
+   allocate( Uaug(nvar1,1), eaug(nvar1), Aaug(npvar1) )
+
+
+!! ========================================================================
+   main_loop: do ii=1,maxcycle
+!! ========================================================================
+
+   iter=iter+1 ! iteration counter
+   
+   if(pr) &
+      write(env%unit,'(/,72("·"),/,30("·")," CYCLE",i5,1x,30("·"),/,72("·"))') iter
+
+   ! save values from previous iteration !
+   gold = gint
+   gnold= gnorm
+   eold = energy
+
+   ! dE via 2-nd order Taylor expansion !
+   if (ii > 1) &
+      call prdechng(anc%nvar,gold,displ,anc%hess,depred)
+   
+   ! displace cartesian coordinates !
+   if (profile) call timer%measure(4,'coordinate transformation')
+   call anc%get_cartesian(mol%xyz)
+   if (profile) call timer%measure(4)
+   
+   ! single point + analytical gradients !
+   if (profile) call timer%measure(5,'single point calculation')
+   g = 0.0_wp
+   call calc%singlepoint(env,mol,chk,prlevel,iter.eq.1,energy,g,sigma,egap,res)
+   if (profile) call timer%measure(5)
+   
+   ! something went wrong in SCC or diag !
+   call env%check(fail)
+   if (fail) then
+      call env%error('SCC not converged, aborting...', source)
+      return
+   endif
+
+   if (energy.gt.1.d42) then
+      call env%error('energy is bogus! aborting...', source)
+      fail=.true.
+      return
+   endif
+
+   ! write to the log file !
+   if (profile) call timer%measure(6,'optimization log')
+   call writeMolecule(mol, ilog, format=fileType%xyz, energy=res%e_total, &
+      & gnorm=res%gnorm)
+   if (profile) call timer%measure(6)
+
+   ! transform xyz (g) to internal gradient (gint) !
+   if (profile) call timer%measure(4)
+   call anc%get_normal(g,gint)
+   if (profile) call timer%measure(4)
+   
+   ! check Euclidean norm of the normal gradient !
+   gnorm = norm2(gint)
+   if(gnorm.gt.500.) then   
+      call env%error('|grad| > 500, something is totally wrong!', source)
+      fail=.true.
+      return
+   endif
+
+   ! average energy and gradient !
+   if (present(avconv)) then
+      call avconv%set_eg_log(energy, gnorm)
+      energy = avconv%get_averaged_energy()
+      gnorm = avconv%get_averaged_gradient()
+      if (pr) then
+         write(env%unit,'("av. E:",1x,f14.7,1x,"->",1x,f14.7)') &
+            avconv%elog(avconv%nlog), energy
+         write(env%unit,'("av. G:",1x,f14.7,1x,"->",1x,f14.7)') &
+            avconv%glog(avconv%nlog), gnorm
+      end if
+   end if
+
+   ! adjust SCC accuracy dynamically !
+   if(gnorm.lt.0.004)then
+      acc = acc_in
+   elseif(gnorm.lt.0.02)then
+      acc = 3.0d0 * acc_in
+   elseif(gnorm.gt.0.02)then
+      acc = 6.0d0 * acc_in
+   endif
+
+   first =.false. ! distinguish between first and subsequent iterations
+
+   ! calculate the change in energy and gradient norm !
+   gchng = gnorm - gnold
+   echng = energy - eold
+
+   ! check for convergence !
+   econverged = abs(echng).lt.ethr
+   gconverged = gnorm.lt.gthr
+   lowered    = echng.lt.0.0_wp
+
+   ! print energy and gradient norm of a current cycle !
+   if(pr) then
+      write(env%unit,'(" * total energy  :",f14.7,1x,"Eh")',advance='no')   energy
+      write(env%unit,'(5x,"change   ",e18.7,1x,"Eh")')                      echng
+      write(env%unit,'(3x,"gradient norm :",f14.7,1x,"Eh/α")',advance='no') gnorm
+      write(env%unit,'(3x,"predicted",e18.7)',advance='no')                 depred
+      write(env%unit,'(1x,"("f7.2"%)")')         (depred-echng)/echng*100
+   endif
+ 
+   ! check if energy is zero !
+   if ( energy .eq. 0.0_wp ) then
+      call env%error('external program error', source)
+      return
+   end if
+
+   if(ii.eq.1) estart = energy ! save first iteration energy
+
+   ! adjust step size dynamically !
+   if(gnorm.lt.0.002)then  
+      alp = 1.5d0       ! 1.5
+   elseif(gnorm.lt.0.0006)then
+      alp = 2.0d0       ! 2
+   elseif(gnorm.lt.0.0003)then
+      alp = 3.0d0       ! 3
+   else
+      alp = 1.0d0
+   endif
+
+! ------------------------------------------------------------------------
+!  Update the hessian
+! ------------------------------------------------------------------------
+
+   if (profile) call timer%measure(7,'hessian update')
+   if (ii.gt.1) then ! for the iteration number greater than 1
+      call powell(anc%nvar,gnorm,gint,gold,displ,anc%hess)
+   endif
+   if (profile) call timer%measure(7)
+   
+   ! print negative eigenvalues !
+   if (any(anc%eigv.lt.0.0)) then
+      write(env%unit,'(3x,"negative eigenvalue found in Hessian:")', advance='no') ! follow the first(most negative one): CHANGE
+      write(env%unit,'(F18.9)') anc%hess
+      
+   else
+      call env%error('no negative eigenvalues', source)
+   endif
+! ------------------------------------------------------------------------
+!  the following lines define the rational function (RF) method
+! ------------------------------------------------------------------------
+   if (profile) call timer%measure(8,"rational function")
+
+   ! How the calculation is actually done. We solve 2 eigenvalue problems:
+   !   ⎛ H   g ⎞ ⎛ dx ⎞     ⎛ dx ⎞
+   !   ⎝ gT  0 ⎠ ⎝  1 ⎠ = λ ⎝  1 ⎠
+   ! everything nicely packed, no blowup
+
+
+   Aaug_neg(1) = anc%hess(1)
+   Aaug_neg(2) = gint(1)
+   Aaug_neg(3) = 0.0_sp 
+   
+   ! solve the eigenvalue problem for TS mode
+   call solver_sspevx(2,r4dum,Aaug_neg,Uaug_neg,eaug_neg,fail)
+
+   ! augmented hessian for minimization !
+   call get_augmented_hessian(Aaug,anc%nvar,anc%hess,gint(2:)) 
+
+  
+   ! chose your favourite solver
+   if (exact .or. nvar1.lt.50) then
+      call solver_sspevx(nvar1,r4dum,Aaug,Uaug,eaug,fail)
+   else
+      ! steepest decent guess for displacement
+      if (ii.eq.1) then
+         Uaug(:,1)=[-real(gint(2:anc%nvar),sp),1.0_sp]
+         dsnrm = sqrt(sdot(nvar1,Uaug,1,Uaug,1))
+         Uaug  = Uaug/dsnrm
+      endif
+      call solver_sdavidson(nvar1,r4dum,Aaug,Uaug,eaug,fail,.false.)
+      if (fail) & ! retry with better solver
+      call solver_sspevx(nvar1,r4dum,Aaug,Uaug,eaug,fail)
+   endif
+   
+   !  divide by last element to get the displacement vector
+   if (fail .or. abs(Uaug(nvar1,1)).lt.1.e-10) then
+      call env%error("internal rational function error", source)
+      return
+   end if
+   displ(1) = Uaug_neg(1,1)/Uaug(anc%nvar,1)
+   displ(2:anc%nvar) = Uaug(1:anc%nvar-1,1)/Uaug(anc%nvar,1)
+   
+   print*, "displ", displ
+   !  check if step is too large, just cut off everything thats to large
+   do j=1,anc%nvar
+      if(abs(displ(j)).gt.maxd) then
+         if(displ(j) < 0) displ(j)=-maxd
+         if(displ(j) > 0) displ(j)= maxd
+      endif
+   enddo
+!  now some output
+   dsnrm=sqrt(ddot(anc%nvar,displ,1,displ,1))
+   if(pr)then
+      ! this array is currently not used and will be overwritten in next step
+      gold = abs(displ)
+      imax(1) = maxloc(gold,1); gold(imax(1)) = 0.0_wp
+      imax(2) = maxloc(gold,1); gold(imax(2)) = 0.0_wp
+      imax(3) = maxloc(gold,1)
+      write(env%unit,'(3x,"displ. norm   :",f14.7,1x,"α")',advance='no') &
+         dsnrm*alp
+      write(env%unit,'(6x,"lambda   ",e18.7)') eaug(1)
+      write(env%unit,'(3x,"maximum displ.:",f14.7,1x,"α")',advance='no') &
+         abs(displ(imax(1)))*alp
+      write(env%unit,'(6x,"in ANC''s ",3("#",i0,", "),"...")') imax
+      !call prdispl(anc%nvar,displ)
+   endif
+   if (profile) call timer%measure(8)
+! ------------------------------------------------------------------------
+
+!  2nd: exit and redo hessian (internal restart)
+   if(ii.gt.2.and.dsnrm.gt.2.0) then
+      if (pr) write(*,*) 'exit because of too large step'
+      exit main_loop
+   endif
+   
+!  new coordinates
+   anc%coord = anc%coord + displ * alp
+
+! conv ?
+   if(abs(echng).lt.ethr.and.gnorm.lt.gthr.and.echng.lt.1.0e-10_wp) then
+      restart=.false.
+      converged = .true.
+      etot=energy
+      return
+   endif
+!! ========================================================================
+   enddo main_loop
+!! ========================================================================
+  
+   if (allocated(Uaug))  deallocate(Uaug)
+   if (allocated(eaug))  deallocate(eaug)
+   if (allocated(Aaug))  deallocate(Aaug)
+
+   restart=.true.
+   etot=energy
+   call anc%get_cartesian(mol%xyz) 
+   
+endsubroutine tsopt
+
+subroutine get_augmented_hessian(Aaug,nvar,hess,gint)
+
+   implicit none
+   real(sp), intent(inout) :: Aaug(:)
+   integer, intent(in)    :: nvar
+   real(wp),intent(in)    :: hess(:)
+   real(wp),intent(in)    :: gint(:)
+
+   real(sp), allocatable :: hess_tmp(:)
+   integer :: ndim, i, j 
+   integer :: index1, index2
+   ndim = (nvar-1) * nvar / 2 ! new size
+
+   allocate(hess_tmp(ndim), source=0.0_sp)
+   index1 = 1
+   do i=2,nvar
+      do j=1,i-1
+         hess_tmp(index1) = hess(i + index1)
+         index1 = index1 + 1
+      enddo
+   enddo
+   Aaug(1:ndim) = hess_tmp
+   Aaug(ndim+1:ndim+nvar-1) = gint
+   Aaug(ndim+nvar) = 0.0_sp
+
+end subroutine get_augmented_hessian
 
 pure subroutine solver_ssyevx(n,thr,A,U,e,fail)
    use xtb_mctc_lapack, only : lapack_syevx

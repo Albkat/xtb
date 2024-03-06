@@ -273,7 +273,7 @@ contains
 
       anyopt = ((set%runtyp == p_run_opt) .or. (set%runtyp == p_run_ohess) .or. &
          &   (set%runtyp == p_run_omd) .or. (set%runtyp == p_run_screen) .or. &
-         &   (set%runtyp == p_run_metaopt))
+         &   (set%runtyp == p_run_metaopt).or.(set%runtyp.eq.p_run_tsopt))
 
       if (allocated(set%solvInput%cpxsolvent) .and. anyopt) call env%terminate("CPCM-X not implemented for geometry optimization. &
          &Please use another solvation model for optimization instead.")
@@ -533,7 +533,7 @@ contains
          select case (set%runtyp)
          case default
             call env%terminate('This is an internal error, please define your runtypes!')
-         case (p_run_scc, p_run_grad, p_run_opt, p_run_hess, p_run_ohess, p_run_bhess, &
+         case (p_run_scc, p_run_grad, p_run_opt,p_run_tsopt, p_run_hess, p_run_ohess, p_run_bhess, &
                p_run_md, p_run_omd, p_run_path, p_run_screen, &
                p_run_modef, p_run_mdopt, p_run_metaopt)
             if (set%mode_extrun == p_ext_gfnff) then
@@ -806,9 +806,6 @@ contains
             deallocate (set%opt_engine)
             call set_opt(env, 'engine', 'pbc_lbfgs')  ! use lbfgs
          end if
-         if (set%opt_engine == p_engine_rf) &
-            call ancopt_header(env%unit, set%veryverbose)
-         !! Print ANCopt header
 
          ! start optimization timer !
          call start_timing(3)
@@ -1806,6 +1803,13 @@ contains
             if (allocated(sec)) then
                call set_opt(env, 'optlevel', sec)
             end if
+
+         case('--tsopt')
+         call set_runtyp('tsopt')
+         call args%nextArg(sec)
+         if (allocated(sec)) then
+            call set_opt(env,'optlevel',sec)
+         endif
 
          case ('--hess')
             call set_runtyp('hess')

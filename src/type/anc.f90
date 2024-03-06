@@ -185,6 +185,7 @@ subroutine generate_anc_blowup(self,iunit,xyz,hess,pr,linear)
    use xtb_mctc_accuracy, only : wp
    use xtb_mctc_la
    use xtb_detrotra, only : detrotra8
+   use xtb_setparam, only : set
    implicit none
 
    !> ANC object
@@ -242,14 +243,17 @@ subroutine generate_anc_blowup(self,iunit,xyz,hess,pr,linear)
 
    ! determine, sort, and nullify rot/trans modes !  
    call detrotra8(linear,self%n,self%xyz,hess,self%eigv) 
-
+   
    ! find lowest eigenvalue (ignore nullified ones) !
    elow = minval(self%eigv,mask=(abs(self%eigv) > thr1)) 
-
-   ! shift eigenvalues to hlow !
-   damp = max(self%hlow - elow,0.0_wp) 
-   where(abs(self%eigv) > thr2) self%eigv = self%eigv + damp
-
+   
+   ! turn off damping for TS: TEMPORARY !
+   if(.not.set%tsopt) then
+      ! shift eigenvalues to hlow !
+      damp = max(self%hlow - elow,0.0_wp) 
+      where(abs(self%eigv) > thr2) self%eigv = self%eigv + damp
+   endif
+   
    ! print eigenvalue spectrum !
    if(pr)then
       write(iunit,*) 'Shifting diagonal of input Hessian by ', damp
@@ -272,8 +276,12 @@ subroutine generate_anc_blowup(self,iunit,xyz,hess,pr,linear)
          if (abs(self%eigv(i)) > thr .and. nvar < self%nvar) then
             nvar = nvar+1
             self%B(:,nvar) = hess(:,i)
-            self%hess(nvar+nvar*(nvar-1)/2) = &
-               min(max(self%eigv(i),self%hlow),self%hmax)
+            if (set%tsopt) then
+               self%hess(nvar+nvar*(nvar-1)/2) = self%eigv(i)
+            else
+               self%hess(nvar+nvar*(nvar-1)/2) = &
+                  min(max(self%eigv(i),self%hlow),self%hmax)
+            endif
          endif
       enddo
 
