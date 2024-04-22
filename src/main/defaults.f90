@@ -47,10 +47,14 @@ subroutine initDefaults(env, calc, mol, gsolvstate)
       end if
    end if
 
-   set%solvInput%state = gsolvstate
+   if (allocated(set%solvInput)) then
+      set%solvInput%state = gsolvstate
 
-   ! Optionally add a solvation model
-   call addSolvationModel(env, calc, set%solvInput)
+      ! Optionally add a solvation model
+      call addSolvationModel(env, calc, set%solvInput)
+   else
+      calc%lSolv = .false.
+   endif   
 
 end subroutine initDefaults
 

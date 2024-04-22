@@ -2064,6 +2064,7 @@ subroutine set_gbsa(env,key,val)
    integer  :: idum
    real(wp) :: ddum
    logical  :: ldum
+   logical,save :: set0 = .true.
    logical,save :: set1 = .true.
    logical,save :: set2 = .true.
    logical,save :: set3 = .true.
@@ -2073,6 +2074,13 @@ subroutine set_gbsa(env,key,val)
    logical,save :: set7 = .true.
    logical,save :: set8 = .true.
    logical,save :: set9 = .true.
+
+
+   if(set0) then
+      allocate(set%solvInput)
+      set0 = .false.
+   endif
+
    select case(key)
    case default ! do nothing
       call env%warning("the key '"//key//"' is not recognized by gbsa",source)

@@ -338,7 +338,7 @@ module xtb_setparam
    real(wp) :: scale_hess = 1.0_wp
 
 !  switch on gbsa for solvent if second argument is a valid solvent name
-   type(TSolvInput) :: solvInput
+   type(TSolvInput), allocatable :: solvInput
 
 !! ------------------------------------------------------------------------
 !  of points along normal mode path scan
